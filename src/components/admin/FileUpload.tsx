@@ -1,10 +1,12 @@
 "use client";
 
+import { upload } from "@vercel/blob/client";
 import { useRef, useState } from "react";
 
 function isVideoUrl(url: string) {
   return /\.(mp4|webm|mov)(\?|#|$)/i.test(url);
 }
+
 function isAudioUrl(url: string) {
   return /\.(mp3|wav|ogg|m4a)(\?|#|$)/i.test(url);
 }
@@ -29,15 +31,31 @@ export default function FileUpload({
   async function handleFile(file: File) {
     setUploading(true);
     setError(null);
+
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: form });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Upload failed.");
-      onChange(json.url);
+      if (file.size === 0) {
+        throw new Error("File is empty.");
+      }
+
+      if (file.size > 50 * 1024 * 1024) {
+        throw new Error("File is too large. Maximum size is 50MB.");
+      }
+
+      const blob = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/upload",
+        multipart: true,
+      });
+
+      onChange(blob.url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      console.error("Upload failed:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Upload failed. Please try again."
+      );
     } finally {
       setUploading(false);
     }
@@ -45,7 +63,10 @@ export default function FileUpload({
 
   return (
     <div className="space-y-2">
-      <label className="block text-xs font-mono uppercase tracking-wide text-neutral-400">{label}</label>
+      <label className="block text-xs font-mono uppercase tracking-wide text-neutral-400">
+        {label}
+      </label>
+
       <div className="flex flex-wrap items-center gap-2">
         <input
           ref={inputRef}
@@ -54,10 +75,15 @@ export default function FileUpload({
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
-            if (file) handleFile(file);
+
+            if (file) {
+              handleFile(file);
+            }
+
             e.target.value = "";
           }}
         />
+
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
@@ -66,6 +92,7 @@ export default function FileUpload({
         >
           {uploading ? "Uploading…" : "Upload file"}
         </button>
+
         <input
           type="text"
           value={value || ""}
@@ -73,6 +100,7 @@ export default function FileUpload({
           placeholder="or paste a URL"
           className="flex-1 min-w-[160px] rounded-md bg-neutral-900 border border-white/10 px-3 py-2 text-xs"
         />
+
         {value && (
           <button
             type="button"
@@ -83,18 +111,36 @@ export default function FileUpload({
           </button>
         )}
       </div>
-      {error && <p className="text-xs text-red-400">{error}</p>}
+
+      {error && (
+        <p className="text-xs text-red-400">
+          {error}
+        </p>
+      )}
+
       {value && (
         <div className="mt-1">
           {kind === "audio" || isAudioUrl(value) ? (
             // eslint-disable-next-line jsx-a11y/media-has-caption
-            <audio controls src={value} className="w-full max-w-sm" />
+            <audio
+              controls
+              src={value}
+              className="w-full max-w-sm"
+            />
           ) : isVideoUrl(value) ? (
             // eslint-disable-next-line jsx-a11y/media-has-caption
-            <video controls src={value} className="h-28 rounded border border-white/10" />
+            <video
+              controls
+              src={value}
+              className="h-28 rounded border border-white/10"
+            />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={value} alt="" className="h-28 rounded border border-white/10 object-cover" />
+            <img
+              src={value}
+              alt=""
+              className="h-28 rounded border border-white/10 object-cover"
+            />
           )}
         </div>
       )}
